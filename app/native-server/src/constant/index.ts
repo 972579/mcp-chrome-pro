@@ -9,6 +9,7 @@ export enum NATIVE_MESSAGE_TYPE {
 }
 
 export const NATIVE_SERVER_PORT = 12306;
+export const RELEASE_EXTENSION_ID = 'hbdgbgagpkpjffpklnamcljpakneikee';
 
 // Timeout constants (in milliseconds)
 export const TIMEOUTS = {
@@ -20,11 +21,7 @@ export const TIMEOUTS = {
 // Server configuration
 export const SERVER_CONFIG = {
   HOST: '127.0.0.1',
-  /**
-   * CORS origin whitelist - only allow Chrome/Firefox extensions and local debugging.
-   * Use RegExp patterns for extension origins, string for exact match.
-   */
-  CORS_ORIGIN: [/^chrome-extension:\/\//, /^moz-extension:\/\//, 'http://127.0.0.1'] as const,
+  CORS_ORIGIN: `chrome-extension://${RELEASE_EXTENSION_ID}`,
   LOGGER_ENABLED: false,
 } as const;
 
@@ -35,6 +32,7 @@ export const HTTP_STATUS = {
   NO_CONTENT: 204,
   BAD_REQUEST: 400,
   NOT_FOUND: 404,
+  SERVICE_UNAVAILABLE: 503,
   INTERNAL_SERVER_ERROR: 500,
   GATEWAY_TIMEOUT: 504,
 } as const;

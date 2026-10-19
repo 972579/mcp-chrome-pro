@@ -29,6 +29,7 @@ import { CodexEngine } from '../agent/engines/codex';
 import { ClaudeEngine } from '../agent/engines/claude';
 import { closeDb } from '../agent/db';
 import { registerAgentRoutes } from './routes';
+import { isOriginAllowed } from './cors-origin';
 
 // ============================================================
 // Types
@@ -71,17 +72,7 @@ export class Server {
 
   private async setupPlugins(): Promise<void> {
     await this.fastify.register(cors, {
-      origin: (origin, cb) => {
-        // Allow requests with no origin (e.g., curl, server-to-server)
-        if (!origin) {
-          return cb(null, true);
-        }
-        // Check if origin matches any pattern in whitelist
-        const allowed = SERVER_CONFIG.CORS_ORIGIN.some((pattern) =>
-          pattern instanceof RegExp ? pattern.test(origin) : origin.startsWith(pattern),
-        );
-        cb(null, allowed);
-      },
+      origin: (origin, cb) => cb(null, isOriginAllowed(origin)),
       methods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
       credentials: true,
     });

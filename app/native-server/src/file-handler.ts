@@ -1,190 +1,172 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
-import * as crypto from 'crypto';
-import fetch from 'node-fetch';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import * as os from 'node:os';
+import * as crypto from 'node:crypto';
+import { downloadPublicUrl } from './network-security';
 
-/**
- * File handler for managing file uploads through the native messaging host
- */
+export function assertSinglePathSegment(fileName: string): string {
+  if (
+    !fileName ||
+    fileName === '.' ||
+    fileName === '..' ||
+    fileName.includes('\0') ||
+    fileName.includes('/') ||
+    fileName.includes('\\') ||
+    fileName.includes(':') ||
+    path.isAbsolute(fileName) ||
+    path.win32.isAbsolute(fileName) ||
+    path.basename(fileName) !== fileName ||
+    path.win32.basename(fileName) !== fileName
+  ) {
+    throw new Error('fileName must be a single path segment');
+  }
+  return fileName;
+}
+
+/** File handler for uploads passing through the native messaging host. */
 export class FileHandler {
-  private tempDir: string;
+  private readonly tempDir: string;
 
-  constructor() {
-    // Create a temp directory for file operations
-    this.tempDir = path.join(os.tmpdir(), 'chrome-mcp-uploads');
-    if (!fs.existsSync(this.tempDir)) {
-      fs.mkdirSync(this.tempDir, { recursive: true });
+  constructor(tempDir = path.join(os.tmpdir(), 'chrome-mcp-uploads')) {
+    const requestedDir = path.resolve(tempDir);
+    fs.mkdirSync(requestedDir, { recursive: true, mode: 0o700 });
+    const stats = fs.lstatSync(requestedDir);
+    if (!stats.isDirectory() || stats.isSymbolicLink()) {
+      throw new Error('Upload directory must be a real directory');
     }
+    this.tempDir = fs.realpathSync(requestedDir);
   }
 
-  /**
-   * Handle file preparation request from the extension
-   */
   async handleFileRequest(request: any): Promise<any> {
     const { action, fileUrl, base64Data, fileName, filePath, traceFilePath, insightName } = request;
 
     try {
       switch (action) {
         case 'prepareFile':
-          if (fileUrl) {
-            return await this.downloadFile(fileUrl, fileName);
-          } else if (base64Data) {
-            return await this.saveBase64File(base64Data, fileName);
-          } else if (filePath) {
-            return await this.verifyFile(filePath);
-          }
+          if (fileUrl) return await this.downloadFile(fileUrl, fileName);
+          if (base64Data) return await this.saveBase64File(base64Data, fileName);
+          if (filePath) return await this.verifyFile(filePath);
           break;
-
-        case 'readBase64File': {
+        case 'readBase64File':
           if (!filePath) return { success: false, error: 'filePath is required' };
           return await this.readBase64File(filePath);
-        }
-
         case 'cleanupFile':
+          if (!filePath) return { success: false, error: 'filePath is required' };
           return await this.cleanupFile(filePath);
-
         case 'analyzeTrace': {
           const targetPath = traceFilePath || filePath;
-          if (!targetPath) {
-            return { success: false, error: 'traceFilePath is required' };
-          }
+          if (!targetPath) return { success: false, error: 'traceFilePath is required' };
           try {
-            // With tsconfig moduleResolution=NodeNext, relative ESM imports need explicit .js extension
             const { analyzeTraceFile } = await import('./trace-analyzer.js');
-            const res = await analyzeTraceFile(targetPath, insightName);
-            return { success: true, ...res };
-          } catch (e: any) {
-            return { success: false, error: e?.message || String(e) };
+            return { success: true, ...(await analyzeTraceFile(targetPath, insightName)) };
+          } catch (error: any) {
+            return { success: false, error: error?.message || String(error) };
           }
         }
-
         default:
-          return {
-            success: false,
-            error: `Unknown file action: ${action}`,
-          };
+          return { success: false, error: `Unknown file action: ${action}` };
       }
+
+      return { success: false, error: 'No file source was provided' };
     } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : String(error),
-      };
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
     }
   }
 
-  /**
-   * Download a file from URL and save to temp directory
-   */
+  private resolveNewFile(fileName: string): string {
+    const safeName = assertSinglePathSegment(fileName);
+    const resolved = path.resolve(this.tempDir, safeName);
+    if (path.dirname(resolved) !== this.tempDir) {
+      throw new Error('Resolved file path escapes the upload directory');
+    }
+    return resolved;
+  }
+
+  private resolveExistingFile(filePath: string): string {
+    const resolved = path.isAbsolute(filePath)
+      ? path.resolve(filePath)
+      : path.resolve(this.tempDir, filePath);
+    if (path.dirname(resolved) !== this.tempDir) {
+      throw new Error('File path must refer to a file in the upload directory');
+    }
+
+    const stats = fs.lstatSync(resolved);
+    if (stats.isSymbolicLink()) throw new Error('Symbolic links are not allowed');
+    const realPath = fs.realpathSync(resolved);
+    if (path.dirname(realPath) !== fs.realpathSync(this.tempDir)) {
+      throw new Error('Resolved file path escapes the upload directory');
+    }
+    return realPath;
+  }
+
+  private writeManagedFile(fileName: string, buffer: Buffer): string {
+    const filePath = this.resolveNewFile(fileName);
+    fs.writeFileSync(filePath, buffer, { flag: 'wx', mode: 0o600 });
+    return filePath;
+  }
+
   private async downloadFile(fileUrl: string, fileName?: string): Promise<any> {
     try {
-      const response = await fetch(fileUrl);
-      if (!response.ok) {
-        throw new Error(`Failed to download file: ${response.statusText}`);
-      }
-
-      // Generate filename if not provided
-      const finalFileName = fileName || this.generateFileName(fileUrl);
-      const filePath = path.join(this.tempDir, finalFileName);
-
-      // Get the file buffer
-      const buffer = await response.buffer();
-
-      // Save to file
-      fs.writeFileSync(filePath, buffer);
-
-      return {
-        success: true,
-        filePath: filePath,
-        fileName: finalFileName,
-        size: buffer.length,
-      };
+      const finalFileName = fileName
+        ? assertSinglePathSegment(fileName)
+        : this.generateFileName(fileUrl);
+      const buffer = await downloadPublicUrl(fileUrl);
+      const filePath = this.writeManagedFile(finalFileName, buffer);
+      return { success: true, filePath, fileName: finalFileName, size: buffer.length };
     } catch (error) {
-      throw new Error(`Failed to download file from URL: ${error}`);
+      throw new Error(
+        `Failed to download file from URL: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
-  /**
-   * Save base64 data as a file
-   */
   private async saveBase64File(base64Data: string, fileName?: string): Promise<any> {
     try {
-      // Remove data URL prefix if present
       const base64Content = base64Data.replace(/^data:.*?;base64,/, '');
-
-      // Convert base64 to buffer
       const buffer = Buffer.from(base64Content, 'base64');
-
-      // Generate filename if not provided
-      const finalFileName = fileName || `upload-${Date.now()}.bin`;
-      const filePath = path.join(this.tempDir, finalFileName);
-
-      // Save to file
-      fs.writeFileSync(filePath, buffer);
-
-      return {
-        success: true,
-        filePath: filePath,
-        fileName: finalFileName,
-        size: buffer.length,
-      };
+      const finalFileName = assertSinglePathSegment(
+        fileName || `upload-${crypto.randomBytes(8).toString('hex')}.bin`,
+      );
+      const filePath = this.writeManagedFile(finalFileName, buffer);
+      return { success: true, filePath, fileName: finalFileName, size: buffer.length };
     } catch (error) {
-      throw new Error(`Failed to save base64 file: ${error}`);
+      throw new Error(
+        `Failed to save base64 file: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
-  /**
-   * Verify that a file exists and is accessible
-   */
   private async verifyFile(filePath: string): Promise<any> {
     try {
-      // Check if file exists
-      if (!fs.existsSync(filePath)) {
-        throw new Error(`File does not exist: ${filePath}`);
-      }
-
-      // Get file stats
-      const stats = fs.statSync(filePath);
-
-      // Check if it's actually a file
-      if (!stats.isFile()) {
-        throw new Error(`Path is not a file: ${filePath}`);
-      }
-
-      // Check if file is readable
-      fs.accessSync(filePath, fs.constants.R_OK);
-
+      const resolved = this.resolveExistingFile(filePath);
+      const stats = fs.statSync(resolved);
+      if (!stats.isFile()) throw new Error(`Path is not a file: ${filePath}`);
+      fs.accessSync(resolved, fs.constants.R_OK);
       return {
         success: true,
-        filePath: filePath,
-        fileName: path.basename(filePath),
+        filePath: resolved,
+        fileName: path.basename(resolved),
         size: stats.size,
       };
     } catch (error) {
-      throw new Error(`Failed to verify file: ${error}`);
+      throw new Error(
+        `Failed to verify file: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
-  /**
-   * Read file content and return as base64 string
-   */
   private async readBase64File(filePath: string): Promise<any> {
     try {
-      if (!fs.existsSync(filePath)) {
-        throw new Error(`File does not exist: ${filePath}`);
-      }
-      const stats = fs.statSync(filePath);
-      if (!stats.isFile()) {
-        throw new Error(`Path is not a file: ${filePath}`);
-      }
-      const buf = fs.readFileSync(filePath);
-      const base64 = buf.toString('base64');
+      const resolved = this.resolveExistingFile(filePath);
+      const stats = fs.statSync(resolved);
+      if (!stats.isFile()) throw new Error(`Path is not a file: ${filePath}`);
+      const buffer = fs.readFileSync(resolved);
       return {
         success: true,
-        filePath,
-        fileName: path.basename(filePath),
+        filePath: resolved,
+        fileName: path.basename(resolved),
         size: stats.size,
-        base64Data: base64,
+        base64Data: buffer.toString('base64'),
       };
     } catch (error) {
       return {
@@ -194,76 +176,51 @@ export class FileHandler {
     }
   }
 
-  /**
-   * Clean up a temporary file
-   */
   private async cleanupFile(filePath: string): Promise<any> {
     try {
-      // Only allow cleanup of files in our temp directory
-      if (!filePath.startsWith(this.tempDir)) {
-        return {
-          success: false,
-          error: 'Can only cleanup files in temp directory',
-        };
-      }
-
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-      }
-
-      return {
-        success: true,
-        message: 'File cleaned up successfully',
-      };
+      const resolved = this.resolveExistingFile(filePath);
+      fs.unlinkSync(resolved);
+      return { success: true, message: 'File cleaned up successfully' };
     } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return { success: true, message: 'File already absent' };
+      }
       return {
         success: false,
-        error: `Failed to cleanup file: ${error}`,
+        error: `Failed to cleanup file: ${error instanceof Error ? error.message : String(error)}`,
       };
     }
   }
 
-  /**
-   * Generate a filename from URL or create a unique one
-   */
-  private generateFileName(url?: string): string {
-    if (url) {
-      try {
-        const urlObj = new URL(url);
-        const pathname = urlObj.pathname;
-        const basename = path.basename(pathname);
-        if (basename && basename !== '/') {
-          // Add random suffix to avoid collisions
-          const ext = path.extname(basename);
-          const name = path.basename(basename, ext);
-          const randomSuffix = crypto.randomBytes(4).toString('hex');
-          return `${name}-${randomSuffix}${ext}`;
-        }
-      } catch {
-        // Invalid URL, fall through to generate random name
+  private generateFileName(url: string): string {
+    try {
+      const encodedName = path.posix.basename(new URL(url).pathname);
+      const decodedName = decodeURIComponent(encodedName);
+      if (decodedName && decodedName !== '/') {
+        assertSinglePathSegment(decodedName);
+        const extension = path.extname(decodedName);
+        const stem = path.basename(decodedName, extension);
+        return `${stem}-${crypto.randomBytes(4).toString('hex')}${extension}`;
       }
+    } catch {
+      // Unsafe or missing URL path names deliberately fall back to a random name.
     }
-
-    // Generate random filename
     return `upload-${crypto.randomBytes(8).toString('hex')}.bin`;
   }
 
-  /**
-   * Clean up old temporary files (older than 1 hour)
-   */
   cleanupOldFiles(): void {
     try {
-      const now = Date.now();
-      const oneHour = 60 * 60 * 1000;
-
-      const files = fs.readdirSync(this.tempDir);
-      for (const file of files) {
-        const filePath = path.join(this.tempDir, file);
-        const stats = fs.statSync(filePath);
-        if (now - stats.mtimeMs > oneHour) {
-          fs.unlinkSync(filePath);
-          // Use stderr to avoid polluting stdout (Native Messaging protocol)
-          console.error(`Cleaned up old temp file: ${file}`);
+      const cutoff = Date.now() - 60 * 60 * 1000;
+      for (const fileName of fs.readdirSync(this.tempDir)) {
+        try {
+          const filePath = this.resolveExistingFile(fileName);
+          const stats = fs.statSync(filePath);
+          if (stats.isFile() && stats.mtimeMs < cutoff) {
+            fs.unlinkSync(filePath);
+            console.error(`Cleaned up old temp file: ${fileName}`);
+          }
+        } catch (error) {
+          console.error(`Skipped unsafe temp entry ${fileName}:`, error);
         }
       }
     } catch (error) {

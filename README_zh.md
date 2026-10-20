@@ -75,7 +75,7 @@ mcp-chrome-bridge-pro register --detect
 > 如果包管理器禁用了安装脚本，或自动注册失败，请使用上述手动注册命令。
 
 2. **下载并加载 Chrome 扩展**
-   - 下载并解压 [Chrome 扩展压缩包](releases/chrome-extension/latest/chrome-mcp-server-lastest.zip)。
+   - 下载并解压 [Chrome 扩展压缩包](https://github.com/972579/mcp-chrome-pro/releases/download/v1.0.0/mcp-chrome-pro-extension-v1.0.0.zip)。
    - 打开 Chrome 并访问 `chrome://extensions/`。
    - 启用“开发者模式”。
    - 点击“加载已解压的扩展程序”，选择解压后包含 `manifest.json` 的目录。

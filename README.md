@@ -21,7 +21,7 @@ mcp-chrome-bridge-pro register --detect
 
 随后安装 Chrome 扩展：
 
-1. 下载并解压 [Chrome 扩展压缩包](releases/chrome-extension/latest/chrome-mcp-server-lastest.zip)。
+1. 下载并解压 [Chrome 扩展压缩包](https://github.com/972579/mcp-chrome-pro/releases/download/v1.0.0/mcp-chrome-pro-extension-v1.0.0.zip)。
 2. 打开 `chrome://extensions/`，开启“开发者模式”。
 3. 点击“加载已解压的扩展程序”，选择解压后包含 `manifest.json` 的目录。
 4. 打开扩展并点击“连接”，随后将 MCP 客户端连接至 `http://127.0.0.1:12306/mcp`。

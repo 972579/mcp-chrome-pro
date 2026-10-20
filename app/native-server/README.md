@@ -17,7 +17,7 @@ mcp-chrome-bridge-pro --version
 mcp-chrome-bridge-pro register --detect
 ```
 
-随后下载并解压 [Chrome 扩展压缩包](https://github.com/972579/mcp-chrome-pro/releases/download/v1.0.0/mcp-chrome-pro-extension-v1.0.0.zip)，在 `chrome://extensions/` 开启“开发者模式”，点击“加载已解压的扩展程序”，选择包含 `manifest.json` 的目录。
+随后下载并解压 [Chrome 扩展压缩包](https://github.com/972579/mcp-chrome-pro/releases/download/v1.0.1/mcp-chrome-pro-extension-v1.0.1.zip)，在 `chrome://extensions/` 开启“开发者模式”，点击“加载已解压的扩展程序”，选择包含 `manifest.json` 的目录。
 
 完整说明见 [扩展安装指南](https://github.com/972579/mcp-chrome-pro/blob/HEAD/releases/README.md)。本包包含所需的本仓库 shared 代码，用户无需克隆仓库或安装 pnpm。
 

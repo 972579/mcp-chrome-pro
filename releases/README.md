@@ -1,4 +1,4 @@
-# mcp-chrome-pro v1.0.0
+# mcp-chrome-pro v1.0.1
 
 ## 🚀 快速安装
 
@@ -19,7 +19,7 @@ mcp-chrome-bridge-pro register --detect
 
 ### 2. 下载并加载扩展
 
-下载 [Chrome 扩展压缩包](https://github.com/972579/mcp-chrome-pro/releases/download/v1.0.0/mcp-chrome-pro-extension-v1.0.0.zip)。
+下载 [Chrome 扩展压缩包](https://github.com/972579/mcp-chrome-pro/releases/download/v1.0.1/mcp-chrome-pro-extension-v1.0.1.zip)。
 
 1. 解压下载的 zip 文件
 2. 打开 Chrome 浏览器

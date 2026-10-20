@@ -4,6 +4,32 @@
 
 默认 MCP 地址：`http://127.0.0.1:12306/mcp`
 
+## npm 安装
+
+要求 Node.js 20 或更高版本，以及 Chrome/Chromium 浏览器。Bridge 已发布至 [npm：mcp-chrome-bridge-pro](https://www.npmjs.com/package/mcp-chrome-bridge-pro)，可直接全局安装：
+
+```bash
+npm install -g mcp-chrome-bridge-pro
+mcp-chrome-bridge-pro --version
+```
+
+全局安装会尝试自动注册 Chrome/Chromium Native Messaging Host。如果安装脚本被禁用或自动注册失败，可手动执行：
+
+```bash
+mcp-chrome-bridge-pro register --detect
+```
+
+随后安装 Chrome 扩展：
+
+1. 下载并解压 [Chrome 扩展压缩包](releases/chrome-extension/latest/chrome-mcp-server-lastest.zip)。
+2. 打开 `chrome://extensions/`，开启“开发者模式”。
+3. 点击“加载已解压的扩展程序”，选择解压后包含 `manifest.json` 的目录。
+4. 打开扩展并点击“连接”，随后将 MCP 客户端连接至 `http://127.0.0.1:12306/mcp`。
+
+完整安装说明见 [扩展安装指南](releases/README.md)。需要自行构建时，参见下方“本地构建”。本 fork 沿用原来的 Native Host 名称，注册会将当前用户的 Host 指向本包。
+
+只支持 stdio 的客户端在全局安装后可将 `command` 配置为 `mcp-chrome-stdio-pro`。安装说明和诊断命令见 [Native Bridge README](app/native-server/README.md)。
+
 ## 本 fork 的主要改动
 
 ### 1. 收紧本地服务的 CORS 边界
@@ -102,7 +128,7 @@ corepack pnpm@8.15.9 -r --filter='!@chrome-mcp/wasm-simd' build
 - 本地注册 Native Messaging Host 可执行：
 
 ```bash
-corepack pnpm@8.15.9 --filter mcp-chrome-bridge run register:dev
+corepack pnpm@8.15.9 --filter mcp-chrome-bridge-pro run register:dev
 ```
 
 注册命令会修改当前用户的浏览器 Native Messaging 配置。如果机器上已经安装其他版本，请先确认现有 manifest 指向，避免覆盖正在使用的 bridge。
@@ -124,14 +150,13 @@ corepack pnpm@8.15.9 --filter mcp-chrome-bridge run register:dev
 }
 ```
 
-只支持 stdio 的客户端可以运行构建后的代理：
+只支持 stdio 的客户端，在全局安装 npm 包后可直接使用代理命令：
 
 ```json
 {
   "mcpServers": {
     "chrome": {
-      "command": "node",
-      "args": ["/absolute/path/to/mcp-chrome-pro/app/native-server/dist/mcp/mcp-server-stdio.js"]
+      "command": "mcp-chrome-stdio-pro"
     }
   }
 }
@@ -139,13 +164,15 @@ corepack pnpm@8.15.9 --filter mcp-chrome-bridge run register:dev
 
 使用 stdio 前，Chrome 扩展和本地 HTTP bridge 仍需正常连接。
 
+从源码构建的用户也可运行 `node app/native-server/dist/mcp/mcp-server-stdio.js`。
+
 ## 验证
 
 ```bash
 # Native Server：类型、lint 和测试
-corepack pnpm@8.15.9 --filter mcp-chrome-bridge exec tsc --noEmit
-corepack pnpm@8.15.9 --filter mcp-chrome-bridge run lint
-corepack pnpm@8.15.9 --filter mcp-chrome-bridge exec jest --runInBand --coverage=false
+corepack pnpm@8.15.9 --filter mcp-chrome-bridge-pro exec tsc --noEmit
+corepack pnpm@8.15.9 --filter mcp-chrome-bridge-pro run lint
+corepack pnpm@8.15.9 --filter mcp-chrome-bridge-pro exec jest --runInBand --coverage=false
 
 # Chrome Extension 测试
 corepack pnpm@8.15.9 --filter chrome-mcp-server run test

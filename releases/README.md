@@ -2,45 +2,59 @@
 
 ## 🚀 快速安装
 
-### 1. 下载扩展
+### 1. 安装 bridge
 
-下载 [chrome-mcp-server-latest.zip](/releases/chrome-extension/latest/chrome-mcp-server-lastest.zip)
+需要 Node.js 20+ 和 Chrome/Chromium 浏览器。通过 [npm](https://www.npmjs.com/package/mcp-chrome-bridge-pro) 安装 bridge：
 
-### 2. 安装步骤
+```bash
+npm install -g mcp-chrome-bridge-pro
+mcp-chrome-bridge-pro --version
+```
+
+安装会尝试自动注册 Native Messaging Host；如果安装脚本被禁用或自动注册失败，执行：
+
+```bash
+mcp-chrome-bridge-pro register --detect
+```
+
+### 2. 下载并加载扩展
+
+下载 [Chrome 扩展压缩包](chrome-extension/latest/chrome-mcp-server-lastest.zip)。
 
 1. 解压下载的 zip 文件
 2. 打开 Chrome 浏览器
 3. 地址栏输入 `chrome://extensions/`
 4. 开启右上角的"开发者模式"开关
 5. 点击"加载已解压的扩展程序"
-6. 选择解压后的文件夹
+6. 选择解压后包含 `manifest.json` 的文件夹
 
 ### 3. 验证安装
 
 - 扩展图标应该出现在浏览器工具栏
 - 点击图标打开配置面板
-- 确认扩展状态显示正常
+- 点击“连接”，确认连接状态正常
 
 ## ⚙️ 配置说明
 
 ### Native Server 连接
 
-1. 确保 Native Server 正在运行（默认端口 12306）
-2. 在扩展 popup 中输入正确的端口号
-3. 点击"连接"按钮测试连接
+1. 确认 bridge 已通过 npm 安装并完成注册
+2. 在扩展面板点击“连接”，扩展会启动本地 Native Server（默认端口 12306）
+3. 将 MCP 客户端连接至 `http://127.0.0.1:12306/mcp`
+
+只支持 stdio 的客户端，在全局安装后可将启动命令配置为 `mcp-chrome-stdio-pro`。该代理同样依赖扩展与本地服务保持连接。
 
 ## 🔧 故障排除
 
 ### 常见问题
 
 1. **扩展无法加载**
-
    - 确保已开启开发者模式
    - 检查文件夹结构是否完整
 
 2. **无法连接 Native Server**
-
-   - 确认 Native Server 正在运行
+   - 运行 `mcp-chrome-bridge-pro doctor` 检查安装和注册状态
+   - 如有注册问题，执行 `mcp-chrome-bridge-pro register --detect` 后重新连接
    - 检查端口号是否正确
    - 查看浏览器控制台错误信息
 

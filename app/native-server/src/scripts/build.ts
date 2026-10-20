@@ -43,6 +43,7 @@ try {
 // 复制package.json并更新其内容
 console.log('准备package.json...');
 const packageJson = require('../../package.json');
+fs.copyFileSync(path.resolve(__dirname, '../../../../LICENSE'), path.join(distDir, '../LICENSE'));
 
 // 创建安装说明
 const readmeContent = `# ${packageJson.name}

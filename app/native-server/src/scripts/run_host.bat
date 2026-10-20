@@ -158,7 +158,7 @@ REM Validation
 if not defined NODE_EXEC (
     echo ERROR: Node.js executable not found! >> "%WRAPPER_LOG%"
     echo Searched: CHROME_MCP_NODE_PATH, node_path.txt, relative, Volta, asdf, fnm, where, common paths >> "%WRAPPER_LOG%"
-    echo To fix: Set CHROME_MCP_NODE_PATH environment variable or run 'mcp-chrome-bridge doctor --fix' >> "%WRAPPER_LOG%"
+    echo To fix: Set CHROME_MCP_NODE_PATH environment variable or run 'mcp-chrome-bridge-pro doctor --fix' >> "%WRAPPER_LOG%"
     exit /B 1
 )
 

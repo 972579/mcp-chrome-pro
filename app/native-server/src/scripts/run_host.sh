@@ -229,7 +229,7 @@ if [ -z "${NODE_EXEC}" ]; then
     {
         echo "ERROR: Node.js executable not found!"
         echo "Searched: CHROME_MCP_NODE_PATH, node_path.txt, relative path, Volta, asdf, fnm, NVM, common paths, command -v, PATH"
-        echo "To fix: Set CHROME_MCP_NODE_PATH environment variable or run 'mcp-chrome-bridge doctor --fix'"
+        echo "To fix: Set CHROME_MCP_NODE_PATH environment variable or run 'mcp-chrome-bridge-pro doctor --fix'"
     } >> "${WRAPPER_LOG}"
     exit 1
 fi

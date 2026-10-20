@@ -52,38 +52,37 @@ Chrome MCP Server 是一个基于chrome插件的 **模型上下文协议 (MCP) �
 
 ### 安装步骤
 
-1. **从github上下载最新的chrome扩展**
+1. **全局安装 bridge**
 
-下载地址：https://github.com/hangwin/mcp-chrome/releases
+本 fork 的 bridge 已发布至 [npm：mcp-chrome-bridge-pro](https://www.npmjs.com/package/mcp-chrome-bridge-pro)。
 
-2. **全局安装mcp-chrome-bridge**
-
-npm
+使用 npm 安装并检查版本：
 
 ```bash
-npm install -g mcp-chrome-bridge
+npm install -g mcp-chrome-bridge-pro
+mcp-chrome-bridge-pro --version
 ```
 
-pnpm
+也可使用 pnpm：
 
 ```bash
-# 方法1：全局启用脚本（推荐）
-pnpm config set enable-pre-post-scripts true
-pnpm install -g mcp-chrome-bridge
+pnpm install -g mcp-chrome-bridge-pro
 
-# 方法2：如果 postinstall 没有运行，手动注册
-pnpm install -g mcp-chrome-bridge
-mcp-chrome-bridge register
+# 如果 postinstall 没有运行，手动注册
+mcp-chrome-bridge-pro register --detect
 ```
 
-> 注意：pnpm v7+ 默认禁用 postinstall 脚本以提高安全性。`enable-pre-post-scripts` 设置控制是否运行 pre/post 安装脚本。如果自动注册失败，请使用上述手动注册命令。
+> 如果包管理器禁用了安装脚本，或自动注册失败，请使用上述手动注册命令。
 
-3. **加载 Chrome 扩展**
-   - 打开 Chrome 并访问 `chrome://extensions/`
-   - 启用"开发者模式"
-   - 点击"加载已解压的扩展程序"，选择 `your/dowloaded/extension/folder`
-   - 点击插件图标打开插件，点击连接即可看到mcp的配置
+2. **下载并加载 Chrome 扩展**
+   - 下载并解压 [Chrome 扩展压缩包](releases/chrome-extension/latest/chrome-mcp-server-lastest.zip)。
+   - 打开 Chrome 并访问 `chrome://extensions/`。
+   - 启用“开发者模式”。
+   - 点击“加载已解压的扩展程序”，选择解压后包含 `manifest.json` 的目录。
+   - 点击扩展图标打开面板，再点击“连接”。默认 MCP 地址为 `http://127.0.0.1:12306/mcp`。
      <img width="475" alt="截屏2025-06-09 15 52 06" src="https://github.com/user-attachments/assets/241e57b8-c55f-41a4-9188-0367293dc5bc" />
+
+完整安装说明见 [扩展安装指南](releases/README.md)；需要自行构建时，参见 [主 README](README.md#本地构建)。
 
 ### 在支持MCP协议的客户端中使用
 
@@ -106,35 +105,19 @@ mcp-chrome-bridge register
 
 #### 使用stdio的方式连接（备选）
 
-假设你的客户端仅支持stdio的连接方式，那么请使用下面的方法：
-
-1. 先查看你刚刚安装的npm包的安装位置
-
-```sh
-# npm 查看方式
-npm list -g mcp-chrome-bridge
-# pnpm 查看方式
-pnpm list -g mcp-chrome-bridge
-```
-
-假设上面的命令输出的路径是：/Users/xxx/Library/pnpm/global/5
-那么你的最终路径就是：/Users/xxx/Library/pnpm/global/5/node_modules/mcp-chrome-bridge/dist/mcp/mcp-server-stdio.js
-
-2. 把下面的配置替换成你刚刚得到的最终路径
+如果客户端仅支持 stdio，全局安装 npm 包后可直接使用以下命令，无需查找安装路径：
 
 ```json
 {
   "mcpServers": {
     "chrome-mcp-stdio": {
-      "command": "npx",
-      "args": [
-        "node",
-        "/Users/xxx/Library/pnpm/global/5/node_modules/mcp-chrome-bridge/dist/mcp/mcp-server-stdio.js"
-      ]
+      "command": "mcp-chrome-stdio-pro"
     }
   }
 }
 ```
+
+stdio 仍依赖 Chrome 扩展和本地 HTTP bridge 正常连接。
 
 比如：在augment中的配置如下：
 

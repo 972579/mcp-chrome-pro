@@ -1,125 +1,129 @@
 #!/usr/bin/env node
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import {
   CallToolRequestSchema,
-  CallToolResult,
-  ListToolsRequestSchema,
-  ListResourcesRequestSchema,
   ListPromptsRequestSchema,
+  ListResourcesRequestSchema,
+  ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { TOOL_SCHEMAS } from 'chrome-mcp-shared';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import * as fs from 'fs';
-import * as path from 'path';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { StdioClientManager } from './stdio-client-manager';
 
 let stdioMcpServer: Server | null = null;
-let mcpClient: Client | null = null;
 
-// Read configuration from stdio-config.json
-const loadConfig = () => {
+export const loadConfig = (): { url: string } => {
   try {
     const configPath = path.join(__dirname, 'stdio-config.json');
-    const configData = fs.readFileSync(configPath, 'utf8');
-    return JSON.parse(configData);
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8')) as { url?: unknown };
+    if (typeof config.url !== 'string') throw new Error('url must be a string');
+    return { url: config.url };
   } catch (error) {
     console.error('Failed to load stdio-config.json:', error);
     throw new Error('Configuration file stdio-config.json not found or invalid');
   }
 };
 
-export const getStdioMcpServer = () => {
-  if (stdioMcpServer) {
-    return stdioMcpServer;
-  }
-  stdioMcpServer = new Server(
-    {
-      name: 'StdioChromeMcpServer',
-      version: '1.0.0',
-    },
-    {
-      capabilities: {
-        tools: {},
-        resources: {},
-        prompts: {},
-      },
-    },
-  );
+const clientManager = new StdioClientManager({ loadUrl: () => loadConfig().url });
 
+export const ensureMcpClient = (forceNew = false) => clientManager.ensureMcpClient(forceNew);
+
+export const setupTools = (server: Server, manager = clientManager): void => {
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOL_SCHEMAS }));
+  server.setRequestHandler(CallToolRequestSchema, async (request) =>
+    manager.callTool(request.params.name, request.params.arguments || {}),
+  );
+  server.setRequestHandler(ListResourcesRequestSchema, async () => ({ resources: [] }));
+  server.setRequestHandler(ListPromptsRequestSchema, async () => ({ prompts: [] }));
+};
+
+export const getStdioMcpServer = (): Server => {
+  if (stdioMcpServer) return stdioMcpServer;
+  stdioMcpServer = new Server(
+    { name: 'StdioChromeMcpServer', version: '1.0.0' },
+    { capabilities: { tools: {}, resources: {}, prompts: {} } },
+  );
   setupTools(stdioMcpServer);
   return stdioMcpServer;
 };
 
-export const ensureMcpClient = async () => {
-  try {
-    if (mcpClient) {
-      const pingResult = await mcpClient.ping();
-      if (pingResult) {
-        return mcpClient;
-      }
-    }
-
-    const config = loadConfig();
-    mcpClient = new Client({ name: 'Mcp Chrome Proxy', version: '1.0.0' }, { capabilities: {} });
-    const transport = new StreamableHTTPClientTransport(new URL(config.url), {});
-    await mcpClient.connect(transport);
-    return mcpClient;
-  } catch (error) {
-    mcpClient?.close();
-    mcpClient = null;
-    console.error('Failed to connect to MCP server:', error);
-  }
-};
-
-export const setupTools = (server: Server) => {
-  // List tools handler
-  server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOL_SCHEMAS }));
-
-  // Call tool handler
-  server.setRequestHandler(CallToolRequestSchema, async (request) =>
-    handleToolCall(request.params.name, request.params.arguments || {}),
-  );
-
-  // List resources handler - REQUIRED BY MCP PROTOCOL
-  server.setRequestHandler(ListResourcesRequestSchema, async () => ({ resources: [] }));
-
-  // List prompts handler - REQUIRED BY MCP PROTOCOL
-  server.setRequestHandler(ListPromptsRequestSchema, async () => ({ prompts: [] }));
-};
-
-const handleToolCall = async (name: string, args: any): Promise<CallToolResult> => {
-  try {
-    const client = await ensureMcpClient();
-    if (!client) {
-      throw new Error('Failed to connect to MCP server');
-    }
-    // Use a sane default of 2 minutes; the previous value mistakenly used 2*6*1000 (12s)
-    const DEFAULT_CALL_TIMEOUT_MS = 2 * 60 * 1000;
-    const result = await client.callTool({ name, arguments: args }, undefined, {
-      timeout: DEFAULT_CALL_TIMEOUT_MS,
-    });
-    return result as CallToolResult;
-  } catch (error: any) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error calling tool: ${error.message}`,
-        },
-      ],
-      isError: true,
-    };
-  }
-};
-
-async function main() {
-  const transport = new StdioServerTransport();
-  await getStdioMcpServer().connect(transport);
+export function cleanupOnce(cleanup: () => Promise<void>): () => Promise<void> {
+  let cleanupPromise: Promise<void> | null = null;
+  return () => {
+    cleanupPromise ??= cleanup();
+    return cleanupPromise;
+  };
 }
 
-main().catch((error) => {
-  console.error('Fatal error Chrome MCP Server main():', error);
-  process.exit(1);
-});
+interface ShutdownProcess {
+  on(event: 'SIGINT' | 'SIGTERM', listener: () => void): unknown;
+  kill(pid: number, signal: 0): true;
+  ppid: number;
+}
+
+interface ShutdownInput {
+  on(event: 'end' | 'close', listener: () => void): unknown;
+}
+
+export function registerShutdownHandlers(options: {
+  stdin: ShutdownInput;
+  process: ShutdownProcess;
+  cleanup: () => Promise<void>;
+  exit: (code: number) => void;
+  watchdogIntervalMs?: number;
+}): NodeJS.Timeout {
+  const shutdown = cleanupOnce(async () => {
+    try {
+      await options.cleanup();
+    } finally {
+      options.exit(0);
+    }
+  });
+  const requestShutdown = () => void shutdown();
+
+  options.stdin.on('end', requestShutdown);
+  options.stdin.on('close', requestShutdown);
+  options.process.on('SIGINT', requestShutdown);
+  options.process.on('SIGTERM', requestShutdown);
+
+  const parentPid = options.process.ppid;
+  const watchdog = setInterval(() => {
+    try {
+      options.process.kill(parentPid, 0);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ESRCH') {
+        clearInterval(watchdog);
+        requestShutdown();
+      }
+    }
+  }, options.watchdogIntervalMs ?? 10_000);
+  watchdog.unref();
+  return watchdog;
+}
+
+export async function main(): Promise<void> {
+  const transport = new StdioServerTransport();
+  const server = getStdioMcpServer();
+  await server.connect(transport);
+
+  registerShutdownHandlers({
+    stdin: process.stdin,
+    process,
+    cleanup: async () => {
+      await clientManager.cleanup();
+      await server.close().catch(() => undefined);
+      await transport.close().catch(() => undefined);
+    },
+    exit: (code) => process.exit(code),
+  });
+}
+
+if (require.main === module) {
+  main().catch((error) => {
+    console.error('Fatal error Chrome MCP Server main():', error);
+    process.exit(1);
+  });
+}

@@ -3,11 +3,8 @@ import { setupTools } from './register-tools';
 
 export let mcpServer: Server | null = null;
 
-export const getMcpServer = () => {
-  if (mcpServer) {
-    return mcpServer;
-  }
-  mcpServer = new Server(
+export const createMcpServer = () => {
+  const server = new Server(
     {
       name: 'ChromeMcpServer',
       version: '1.0.0',
@@ -19,6 +16,15 @@ export const getMcpServer = () => {
     },
   );
 
-  setupTools(mcpServer);
+  setupTools(server);
+  return server;
+};
+
+/** @deprecated HTTP transports must use createMcpServer() per session. */
+export const getMcpServer = () => {
+  if (mcpServer) {
+    return mcpServer;
+  }
+  mcpServer = createMcpServer();
   return mcpServer;
 };

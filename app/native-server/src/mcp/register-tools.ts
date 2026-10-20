@@ -8,6 +8,14 @@ import nativeMessagingHostInstance from '../native-messaging-host';
 import { NativeMessageType, TOOL_SCHEMAS } from 'chrome-mcp-shared';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 
+export function extensionRequestError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  if (/timed out/i.test(message)) {
+    return 'Chrome extension did not respond before the timeout. Confirm that the extension is connected, then retry.';
+  }
+  return message;
+}
+
 async function listDynamicFlowTools(): Promise<Tool[]> {
   try {
     const response = await nativeMessagingHostInstance.sendRequestToExtensionAndWait(
@@ -110,7 +118,7 @@ const handleToolCall = async (name: string, args: any): Promise<CallToolResult> 
           content: [
             {
               type: 'text',
-              text: `Error resolving dynamic flow tool: ${err?.message || String(err)}`,
+              text: `Error resolving dynamic flow tool: ${extensionRequestError(err)}`,
             },
           ],
           isError: true,
@@ -144,7 +152,7 @@ const handleToolCall = async (name: string, args: any): Promise<CallToolResult> 
       content: [
         {
           type: 'text',
-          text: `Error calling tool: ${error.message}`,
+          text: `Error calling tool: ${extensionRequestError(error)}`,
         },
       ],
       isError: true,
